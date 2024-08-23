@@ -1,6 +1,12 @@
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.gestures.Orientation
+import androidx.compose.foundation.gestures.draggable
+import androidx.compose.foundation.gestures.rememberDraggableState
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -11,7 +17,12 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.itemsIndexed
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.Button
+import androidx.compose.material.IconButton
 import androidx.compose.material.MaterialTheme
 import androidx.compose.material.Text
 import androidx.compose.material.TextField
@@ -19,16 +30,24 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.KeyboardCapitalization
+import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import org.jetbrains.compose.resources.ExperimentalResourceApi
 import org.jetbrains.compose.resources.painterResource
 import org.jetbrains.compose.ui.tooling.preview.Preview
 
-import greetingskmp.composeapp.generated.resources.Res
-import greetingskmp.composeapp.generated.resources.compose_multiplatform
+
+import org.jetbrains.compose.resources.stringResource
+import org.jetbrains.compose.resources.painterResource
+
+import bumps.composeapp.generated.resources.Res
+import bumps.composeapp.generated.resources.app_icon_1024
+import bumps.composeapp.generated.resources.compose_multiplatform
 
 @OptIn(ExperimentalResourceApi::class)
 @Composable
@@ -36,19 +55,6 @@ import greetingskmp.composeapp.generated.resources.compose_multiplatform
 fun App() {
     MaterialTheme {
         AppContent()
-        //var showContent by remember { mutableStateOf(false) }
-//        Column(Modifier.fillMaxWidth(), horizontalAlignment = Alignment.CenterHorizontally) {
-//            Button(onClick = { showContent = !showContent }) {
-//                Text("Click me!")
-//            }
-//            AnimatedVisibility(showContent) {
-//                val greeting = remember { Greeting().greet() }
-//                Column(Modifier.fillMaxWidth(), horizontalAlignment = Alignment.CenterHorizontally) {
-//                    Image(painterResource(Res.drawable.compose_multiplatform), null)
-//                    Text("Compose: $greeting")
-//                }
-//            }
-//        }
     }
 }
 
@@ -90,11 +96,14 @@ fun AppContent() {
     }
 }
 
+@OptIn(ExperimentalResourceApi::class)
 @Composable
 fun GolferInputScreen(golfers: MutableList<Golfer>, holes: MutableList<Hole>, onCalculateBumps: () -> Unit) {
     var golferName by remember { mutableStateOf("") }
     var golferBumps by remember { mutableStateOf("") }
     var holeDifficultiesInput by remember { mutableStateOf("") }
+    // Get the keyboard controller
+    val keyboardController = LocalSoftwareKeyboardController.current
 
 
     Column(
@@ -108,21 +117,31 @@ fun GolferInputScreen(golfers: MutableList<Golfer>, holes: MutableList<Hole>, on
             value = golferName,
             onValueChange = { golferName = it },
             label = { Text("Golfer Name") },
-            modifier = Modifier.fillMaxWidth() // Make TextField fill the width
+            modifier = Modifier.fillMaxWidth(), // Make TextField fill the width
+            keyboardOptions = KeyboardOptions(capitalization = KeyboardCapitalization.Words)
         )
 
         TextField(
             value = golferBumps,
             onValueChange = { golferBumps = it },
             label = { Text("Bumps") },
-            modifier = Modifier.fillMaxWidth() // Make TextField fill the width
+            modifier = Modifier.fillMaxWidth(), // Make TextField fill the width
+            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number)
         )
-
         Button(
             onClick = {
-                golfers.add(Golfer(golferName, golferBumps.toInt()))
+                if (golferBumps=="")
+                {
+                    golferBumps="0"
+                }
+                if (golferName=="") {
+                    golferName = "Golfer"
+                }
+                golfers.add(Golfer(golferName, golferBumps.toInt(), 0))
                 golferName = ""
                 golferBumps = ""
+                // Hide the keyboard
+                keyboardController?.hide()
             },
             modifier = Modifier.fillMaxWidth() // Make Button fill the width
         ) {
@@ -130,11 +149,19 @@ fun GolferInputScreen(golfers: MutableList<Golfer>, holes: MutableList<Hole>, on
         }
 
         // Show a list of golfers and bumps
-        LazyColumn {
-            items(golfers) { golfer ->
-                Text("${golfer.name} (${golfer.bumps} bumps)")
-            }
-        }
+//        LazyColumn {
+//            items(golfers) { golfer ->
+//                Row {
+//                    Text("${golfer.name} (${golfer.bumps} bumps)" , fontWeight = FontWeight.Bold, modifier = Modifier.weight(2f, fill = true))
+//
+//                    IconButton(onClick = { golfers.remove(golfer) }) {
+//                        Text("X", color = Color.Red, fontWeight = FontWeight.Bold)
+//                    }
+//                }
+//            }
+//        }
+
+        DraggableGolfersList(golfers)
 
         Button(
             onClick = onCalculateBumps,
@@ -142,8 +169,15 @@ fun GolferInputScreen(golfers: MutableList<Golfer>, holes: MutableList<Hole>, on
         ) {
             Text("Calculate Bumps")
         }
+        Image(
+            painter = painterResource(Res.drawable.app_icon_1024),
+            contentDescription = null,
+            modifier = Modifier.align(Alignment.CenterHorizontally)
+        )
+
 
         Spacer(Modifier.height(32.dp)) // Add spacing between elements
+
 
         // Section for hole difficulties input
         var holeDifficultiesInput by remember { mutableStateOf(holes.joinToString(", ") { it.difficulty.toString() }) }
@@ -172,6 +206,77 @@ fun GolferInputScreen(golfers: MutableList<Golfer>, holes: MutableList<Hole>, on
 //        }
     }
 }
+@Composable
+fun DraggableGolfersList(golfers: MutableList<Golfer>) {
+    val scrollState = rememberScrollState()
+    var draggedIndex by remember { mutableStateOf(-1) }
+
+    Box() {
+        Column(
+            modifier = Modifier
+                .verticalScroll(scrollState)
+        ) {
+            golfers.forEachIndexed { index, golfer ->
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween
+                ) {
+                    Text(
+                        text = "${golfer.name} (${golfer.bumps} bumps)",
+                        modifier = Modifier
+                            .fillMaxWidth(0.6f)
+//            .background(Color.Green)
+                    )
+//up
+                    if (index > 0) {
+                        IconButton(onClick = {
+                            val removed = golfers.removeAt(index)
+                            golfers.add(index - 1, removed)
+                        }) {
+                            Text("☝\uFE0F")
+                        }
+                    }
+//                   else {
+//                        Spacer(modifier = Modifier.width(24.dp))
+//                    }
+                    else {
+                        IconButton(onClick = {
+                        }) {
+                            Text(" ")
+                        }
+                    }
+//down
+                    if (index < golfers.size - 1) {
+                        IconButton(onClick = {
+                            if (index < golfers.size - 1) {
+                                val removed = golfers.removeAt(index)
+                                golfers.add(index + 1, removed)
+                            }
+                        }) {
+                            Text("\uD83D\uDC4E")
+                        }
+                    }
+                    else {
+                        IconButton(onClick = {
+                        }) {
+                            Text(" ")
+                        }
+                    }
+                    //delete
+                    IconButton(onClick = {
+                        golfers.removeAt(index)
+                    }) {
+                        Text("\uD83D\uDDD1\uFE0F")
+                    }
+
+
+                }
+            }
+        }
+    }
+}
+
+
 
 fun calculateBumps(golfers: List<Golfer>, holes: List<Hole>): Map<String, List<Int>> {
     // Sort the holes by difficulty, descending
@@ -194,6 +299,7 @@ fun calculateBumps(golfers: List<Golfer>, holes: List<Hole>): Map<String, List<I
     return golferBumps
 }
 
+@OptIn(ExperimentalResourceApi::class)
 @Composable
 fun BumpMatrixScreen(golfers: List<Golfer>, holes: List<Hole>, onBack: () -> Unit) {
     // Handle the system back button press
@@ -242,12 +348,14 @@ fun BumpMatrixScreen(golfers: List<Golfer>, holes: List<Hole>, onBack: () -> Uni
         }
 
         LazyColumn {
-            items(holes.sortedBy { it.number }) { hole ->
+            itemsIndexed(holes.sortedBy { it.number }) { index, hole ->
+                val clickCounts = remember { mutableStateMapOf<Golfer, Int>() }
                 Row(modifier = Modifier.fillMaxWidth()) {
                     Text(
                         "${hole.number} (${hole.difficulty}): ",
                         //style = MaterialTheme.typography.body1, // Style can be adjusted as needed
                         modifier = Modifier.weight(1f)
+                            .background(if (index % 2 == 1) Color.LightGray else Color.Transparent)
                     )
                     // for each golfer in golfers write a 1 if they get a bump on this hole, 0 if not
                     golfers.forEach { golfer ->
@@ -256,18 +364,41 @@ fun BumpMatrixScreen(golfers: List<Golfer>, holes: List<Hole>, onBack: () -> Uni
                         if (golfer.bumps > 18) {
                             bumpText = if (getsBump) "YESx2" else "YES"
                         }
+//                        val clickCount = remember { mutableStateOf(0) }
+
+                        val isClicked = remember { mutableStateOf(false) }
+
                         Text(
                             text = bumpText,
                             //style = MaterialTheme.typography.body1, // Style can be adjusted as needed
                             modifier = Modifier.weight(1f)
+                                .background(if (index % 2 == 1) Color.LightGray else Color.Transparent)
+                                .background(if (isClicked.value) Color.hsl(168F, 0.97F, 0.42F) else if (index % 2 == 1) Color.LightGray else Color.Transparent)
+                                .clickable {
+                                    isClicked.value = !isClicked.value
+                                    if (isClicked.value) {
+                                        golfer.wins += 1
+                                    }
+                                    else {
+                                        golfer.wins -= 1
+                                    }
+
+
+                                } // Change state when clicked
                         )
+                        if (isClicked.value) {
+                            Text(text = (golfer.wins).toString(), modifier = Modifier.background(Color.hsl(168F, 0.97F, 0.42F) ))
+                        }
                     }
                 }
             }
         }
+        Image(
+            painter = painterResource(Res.drawable.app_icon_1024),
+            contentDescription = null,
+            modifier = Modifier.align(Alignment.CenterHorizontally)
+        )
     }
-
-
 }
 
 fun updateHoleDifficulties(holes: MutableList<Hole>, difficulties: List<Int>) {
